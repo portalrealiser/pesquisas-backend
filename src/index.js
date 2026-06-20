@@ -2,6 +2,8 @@
 // Ponto de entrada do backend: inicializa o banco e sobe a API com todas as rotas.
 
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const { pool, init, SCHEMA } = require('./db');
@@ -61,6 +63,18 @@ app.get('/api/health', async (req, res) => {
 // Rotas
 app.use('/api/admin', adminRoutes);
 app.use('/api/p', publicRoutes);
+
+// Servir o frontend (build do React) no mesmo domínio.
+// Em produção, o Dockerfile copia o build pra ./public.
+const FRONTEND_DIR = path.join(__dirname, '..', 'public');
+if (fs.existsSync(path.join(FRONTEND_DIR, 'index.html'))) {
+  app.use(express.static(FRONTEND_DIR));
+  // SPA fallback: qualquer caminho que NÃO seja /api devolve o index.html,
+  // pra o React Router cuidar das rotas no navegador.
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+  });
+}
 
 // Erro de JSON malformado
 app.use((err, req, res, next) => {

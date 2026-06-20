@@ -1,0 +1,15 @@
+{
+  "name": "pesquisas-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Backend do sistema de pesquisas anonimas (etapa 1: conexao + schema)",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}

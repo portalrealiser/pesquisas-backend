@@ -24,7 +24,7 @@ export default function LoginPage() {
   }
 
   return (
-    <Container className="py-16">
+    <Container className="py-12 sm:py-16">
       <div className="mx-auto max-w-sm">
         <Card>
           <h1 className="mb-1 text-lg font-medium">Entrar no painel</h1>
@@ -39,7 +39,7 @@ export default function LoginPage() {
               autoFocus
             />
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            <Button type="submit" className="mt-4 w-full" disabled={loading}>
+            <Button type="submit" className="mt-4 w-full py-3 sm:py-2.5" disabled={loading}>
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>

@@ -43,9 +43,7 @@ function Question({ q, value, onChange }) {
       {q.type === 'unica' && (
         <div className="space-y-2">
           {q.options.map((o) => (
-            <OptionRow key={o.id} selected={value === o.id} onClick={() => onChange(o.id)}>
-              {o.text}
-            </OptionRow>
+            <OptionRow key={o.id} selected={value === o.id} onClick={() => onChange(o.id)}>{o.text}</OptionRow>
           ))}
         </div>
       )}
@@ -56,12 +54,8 @@ function Question({ q, value, onChange }) {
             const arr = Array.isArray(value) ? value : [];
             const checked = arr.includes(o.id);
             return (
-              <OptionRow
-                key={o.id}
-                multi
-                selected={checked}
-                onClick={() => onChange(checked ? arr.filter((x) => x !== o.id) : [...arr, o.id])}
-              >
+              <OptionRow key={o.id} multi selected={checked}
+                onClick={() => onChange(checked ? arr.filter((x) => x !== o.id) : [...arr, o.id])}>
                 {o.text}
               </OptionRow>
             );
@@ -72,35 +66,22 @@ function Question({ q, value, onChange }) {
       {q.type === 'texto_curto' && (
         <input
           className="w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-          placeholder="Sua resposta"
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-        />
+          placeholder="Sua resposta" value={value || ''} onChange={(e) => onChange(e.target.value)} />
       )}
 
       {q.type === 'texto_longo' && (
-        <textarea
-          rows={4}
+        <textarea rows={4}
           className="w-full resize-y rounded-lg border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-          placeholder="Sua resposta"
-          value={value || ''}
-          onChange={(e) => onChange(e.target.value)}
-        />
+          placeholder="Sua resposta" value={value || ''} onChange={(e) => onChange(e.target.value)} />
       )}
 
       {q.type === 'escala' && (
         <div className="flex flex-wrap gap-2">
           {range(q.scale_min, q.scale_max).map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onChange(n)}
+            <button key={n} type="button" onClick={() => onChange(n)}
               className={`h-11 w-11 rounded-lg border text-sm transition ${
-                value === n
-                  ? 'border-brand-600 bg-brand-600 text-white'
-                  : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-brand-400'
-              }`}
-            >
+                value === n ? 'border-brand-600 bg-brand-600 text-white' : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-brand-400'
+              }`}>
               {n}
             </button>
           ))}
@@ -115,11 +96,7 @@ function CenteredCard({ icon: Icon, color, title, text }) {
     <Container className="py-16">
       <div className="mx-auto max-w-md">
         <Card className="text-center">
-          {Icon && (
-            <div className="mb-3 flex justify-center">
-              <Icon size={40} className={color} />
-            </div>
-          )}
+          {Icon && <div className="mb-3 flex justify-center"><Icon size={40} className={color} /></div>}
           <h1 className="text-lg font-medium">{title}</h1>
           {text && <p className="mt-2 text-sm text-[var(--color-muted)]">{text}</p>}
         </Card>
@@ -131,37 +108,44 @@ function CenteredCard({ icon: Icon, color, title, text }) {
 export default function PublicPage() {
   const { slug } = useParams();
   const [survey, setSurvey] = useState(null);
-  const [loadState, setLoadState] = useState('loading'); // loading|ok|notfound|closed|error
+  const [fingerprint, setFingerprint] = useState(undefined); // undefined=calculando, null=falhou, string=ok
+  const [phase, setPhase] = useState('loading'); // loading|form|dup|done|notfound|closed|error
   const [answers, setAnswers] = useState({});
-  const [fingerprint, setFingerprint] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(null); // null|ok|dup
   const [error, setError] = useState('');
 
+  // 1) Carrega a pesquisa
   useEffect(() => {
-    api
-      .get(`/p/${slug}`)
-      .then((s) => {
-        setSurvey(s);
-        setLoadState('ok');
-      })
+    let alive = true;
+    api.get(`/p/${slug}`)
+      .then((s) => alive && setSurvey(s))
       .catch((e) => {
-        if (e.status === 404) setLoadState('notfound');
-        else if (e.status === 403) setLoadState('closed');
-        else setLoadState('error');
+        if (!alive) return;
+        if (e.status === 404) setPhase('notfound');
+        else if (e.status === 403) setPhase('closed');
+        else setPhase('error');
       });
+    return () => { alive = false; };
   }, [slug]);
 
+  // 2) Calcula o fingerprint do navegador
   useEffect(() => {
     let alive = true;
     FingerprintJS.load()
       .then((fp) => fp.get())
       .then((r) => alive && setFingerprint(r.visitorId))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
+      .catch(() => alive && setFingerprint(null));
+    return () => { alive = false; };
   }, []);
+
+  // 3) Com a pesquisa carregada e o fingerprint pronto, checa se já respondeu (na abertura)
+  useEffect(() => {
+    if (!survey || fingerprint === undefined || phase !== 'loading') return;
+    const qs = fingerprint ? `?fingerprint=${encodeURIComponent(fingerprint)}` : '';
+    api.get(`/p/${slug}/check${qs}`)
+      .then((r) => setPhase(r.responded ? 'dup' : 'form'))
+      .catch(() => setPhase('form'));
+  }, [survey, fingerprint, phase, slug]);
 
   function setAnswer(qid, val) {
     setAnswers((a) => ({ ...a, [qid]: val }));
@@ -171,11 +155,7 @@ export default function PublicPage() {
     for (const q of survey.questions) {
       if (!q.required) continue;
       const a = answers[q.id];
-      const empty =
-        a === undefined ||
-        a === null ||
-        (Array.isArray(a) && a.length === 0) ||
-        (typeof a === 'string' && a.trim() === '');
+      const empty = a === undefined || a === null || (Array.isArray(a) && a.length === 0) || (typeof a === 'string' && a.trim() === '');
       if (empty) return `A pergunta "${q.text}" é obrigatória.`;
     }
     return null;
@@ -184,44 +164,26 @@ export default function PublicPage() {
   async function submit() {
     setError('');
     const v = validate();
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
     setSubmitting(true);
     try {
       await api.post(`/p/${slug}/submit`, { fingerprint, answers });
-      setDone('ok');
+      setPhase('done');
     } catch (e) {
-      if (e.status === 409) setDone('dup');
-      else if (e.status === 403) setLoadState('closed');
-      else {
-        setError(e.error || 'Não foi possível enviar sua resposta.');
-        setSubmitting(false);
-      }
+      if (e.status === 409) setPhase('dup');
+      else if (e.status === 403) setPhase('closed');
+      else { setError(e.error || 'Não foi possível enviar sua resposta.'); setSubmitting(false); }
     }
   }
 
-  if (loadState === 'loading') {
-    return (
-      <Container className="py-16">
-        <div className="flex justify-center">
-          <Spinner />
-        </div>
-      </Container>
-    );
+  if (phase === 'loading') {
+    return <Container className="py-16"><div className="flex justify-center"><Spinner /></div></Container>;
   }
-  if (loadState === 'notfound')
-    return <CenteredCard title="Pesquisa não encontrada" text="O link pode estar incorreto." />;
-  if (loadState === 'closed')
-    return <CenteredCard title="Pesquisa encerrada" text="Esta pesquisa não está aberta para respostas no momento." />;
-  if (loadState === 'error')
-    return <CenteredCard icon={AlertCircle} color="text-red-500" title="Algo deu errado" text="Tente novamente em instantes." />;
-
-  if (done === 'ok')
-    return <CenteredCard icon={CheckCircle2} color="text-brand-600" title="Resposta enviada!" text="Obrigado por participar." />;
-  if (done === 'dup')
-    return <CenteredCard icon={Check} color="text-brand-600" title="Você já respondeu" text="Obrigado! Sua resposta a esta pesquisa já foi registrada." />;
+  if (phase === 'notfound') return <CenteredCard title="Pesquisa não encontrada" text="O link pode estar incorreto." />;
+  if (phase === 'closed') return <CenteredCard title="Pesquisa encerrada" text="Esta pesquisa não está aberta para respostas no momento." />;
+  if (phase === 'error') return <CenteredCard icon={AlertCircle} color="text-red-500" title="Algo deu errado" text="Tente novamente em instantes." />;
+  if (phase === 'done') return <CenteredCard icon={CheckCircle2} color="text-brand-600" title="Resposta enviada!" text="Obrigado por participar." />;
+  if (phase === 'dup') return <CenteredCard icon={Check} color="text-brand-600" title="Você já respondeu" text="Obrigado! Sua resposta a esta pesquisa já foi registrada." />;
 
   return (
     <Container className="py-8">
@@ -236,9 +198,7 @@ export default function PublicPage() {
           {survey.questions.map((q) => (
             <Question key={q.id} q={q} value={answers[q.id]} onChange={(val) => setAnswer(q.id, val)} />
           ))}
-
           {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-
           <Button onClick={submit} disabled={submitting} className="w-full">
             {submitting ? 'Enviando...' : 'Enviar resposta'}
           </Button>

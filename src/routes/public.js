@@ -126,6 +126,34 @@ function validarRespostas(questions, optionsPorPergunta, respostas) {
   return { linhas };
 }
 
+// GET /api/p/:slug/check?fingerprint=...  -> { responded: bool }
+// Verifica na ABERTURA se o visitante já respondeu (cookie + fingerprint + IP),
+// pra mostrar o aviso antes de exibir o formulário.
+router.get('/:slug/check', async (req, res) => {
+  try {
+    const s = (await pool.query('SELECT id, status FROM surveys WHERE slug = $1', [req.params.slug])).rows[0];
+    if (!s || s.status !== 'publicada') return res.json({ responded: false });
+
+    const visitorId = req.cookies ? req.cookies[VISITOR_COOKIE] : null;
+    const fp = req.query.fingerprint ? String(req.query.fingerprint).slice(0, 200) : null;
+    const ipHash = hashIp(req.ip);
+
+    const dup = await pool.query(
+      `SELECT 1 FROM responses
+       WHERE survey_id = $1
+         AND ( ($2::text IS NOT NULL AND visitor_cookie = $2)
+            OR ($3::text IS NOT NULL AND fingerprint = $3)
+            OR ($4::boolean AND ip_hash = $5) )
+       LIMIT 1`,
+      [s.id, visitorId, fp, IP_DEDUP, ipHash]
+    );
+    res.json({ responded: dup.rowCount > 0 });
+  } catch (e) {
+    console.error('[public] check:', e.message);
+    res.json({ responded: false }); // em erro, não bloqueia — o submit ainda protege
+  }
+});
+
 // POST /api/p/:slug/submit  { fingerprint, answers: { "<questionId>": valor } }
 router.post('/:slug/submit', async (req, res) => {
   const { fingerprint, answers } = req.body || {};

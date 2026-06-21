@@ -15,10 +15,21 @@
 }
 
 html, body, #root { height: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body {
   margin: 0;
+  overflow-x: hidden;
   font-family: var(--font-sans);
   color: var(--color-ink);
   background: var(--color-surface);
   -webkit-font-smoothing: antialiased;
+}
+
+/* iOS (Safari) dá zoom automático ao focar campos com fonte < 16px.
+   Forçar 16px nos campos no celular evita esse zoom, sem mudar o desktop. */
+@media (max-width: 640px) {
+  input, select, textarea { font-size: 16px !important; }
 }
